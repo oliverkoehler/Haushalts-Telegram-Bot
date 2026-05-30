@@ -44,14 +44,15 @@ function germanMonthName(key) {
  */
 function formatDuration(minutes) {
   const rounded = Math.round(minutes * 100) / 100; // max. 2 Nachkommastellen
-  const whole = Math.floor(rounded);
-  const h = Math.floor(whole / 60);
-  const m = rounded - h * 60;
+  const h = Math.floor(rounded / 60);
+  // Restminuten erneut runden, sonst kommt der Fließkomma-Fehler zurück
+  // (z. B. 89,6 - 60 = 29,599999…).
+  const m = Math.round((rounded - h * 60) * 100) / 100;
 
   const parts = [];
   if (h > 0) parts.push(`${h} Std`);
   if (m > 0 || h === 0) {
-    // Nachkommastellen nur anzeigen, wenn vorhanden
+    // Nachkommastellen nur anzeigen, wenn vorhanden; deutsches Komma.
     const mStr = Number.isInteger(m) ? String(m) : String(m).replace('.', ',');
     parts.push(`${mStr} Min`);
   }
