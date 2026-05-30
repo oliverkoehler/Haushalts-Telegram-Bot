@@ -1,0 +1,17 @@
+{
+  "name": "haushalts-bot",
+  "version": "1.0.0",
+  "description": "Telegram-Bot zum Tracken von Haushaltsminuten in einem Gruppenchat",
+  "main": "src/bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/bot.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "node-telegram-bot-api": "^0.67.0"
+  }
+}
