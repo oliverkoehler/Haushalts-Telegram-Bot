@@ -2,9 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { monthKey } = require('./time');
+const { monthKey, previousMonthKey } = require('./time');
 
-const DATA_FILE = path.join(__dirname, '..', 'data.json');
+// Speicherort: per DATA_DIR überschreibbar (z. B. Docker-Volume), sonst Projekt-Root.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..');
+const DATA_FILE = path.join(DATA_DIR, 'data.json');
 const TMP_FILE = DATA_FILE + '.tmp';
 const HISTORY_CAP = 200; // wie viele History-Einträge je Chat maximal aufgehoben werden
 
@@ -15,6 +17,7 @@ const HISTORY_CAP = 200; // wie viele History-Einträge je Chat maximal aufgehob
  *     "<chatId>": {
  *       helpMessageId: number | null,
  *       leaderboardMessageId: number | null,
+ *       lastWinnerMonth: string | null,   // zuletzt gekürter Monat ("YYYY-MM")
  *       entries:  [ { id, userId, userName, minutes, ts, month } ],
  *       history:  [ { ts, type: 'add'|'undo', userName, minutes } ]
  *     }
@@ -37,6 +40,8 @@ function load() {
 }
 
 function save() {
+  // Zielverzeichnis sicherstellen (z. B. frisch gemountetes Volume).
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   // Atomar schreiben: erst temporär, dann umbenennen.
   fs.writeFileSync(TMP_FILE, JSON.stringify(data, null, 2), 'utf8');
   fs.renameSync(TMP_FILE, DATA_FILE);
@@ -48,6 +53,9 @@ function getChat(chatId) {
     data.chats[key] = {
       helpMessageId: null,
       leaderboardMessageId: null,
+      // Seed = Vormonat, damit ein frisch angelegter Chat nicht rückwirkend
+      // einen Monat kürt, den es vor dem Bot noch gar nicht gab.
+      lastWinnerMonth: previousMonthKey(),
       entries: [],
       history: [],
     };
@@ -58,6 +66,7 @@ function getChat(chatId) {
   if (!chat.history) chat.history = [];
   if (chat.helpMessageId === undefined) chat.helpMessageId = null;
   if (chat.leaderboardMessageId === undefined) chat.leaderboardMessageId = null;
+  if (chat.lastWinnerMonth === undefined) chat.lastWinnerMonth = previousMonthKey();
   return chat;
 }
 
@@ -118,6 +127,16 @@ function setLeaderboardMessageId(chatId, messageId) {
   save();
 }
 
+function setLastWinnerMonth(chatId, month) {
+  getChat(chatId).lastWinnerMonth = month;
+  save();
+}
+
+/** Alle bekannten Chat-IDs (als Strings). */
+function getAllChatIds() {
+  return Object.keys(data.chats);
+}
+
 /**
  * Aufsummierte Minuten gruppiert nach Monat und Nutzer.
  * Neuester Monat zuerst, innerhalb des Monats Minuten absteigend.
@@ -144,9 +163,16 @@ function getMonthlyTotals(chatId) {
 }
 
 /**
+ * Summen eines bestimmten Monats ("YYYY-MM"), Minuten absteigend.
+ * @returns {Array<{userId:number,userName:string,minutes:number}>} (ggf. leer)
+ */
+function getTotalsForMonth(chatId, month) {
+  const found = getMonthlyTotals(chatId).find((m) => m.month === month);
+  return found ? found.totals : [];
+}
+
+/**
  * Liefert die letzten History-Einträge (neueste zuerst).
- * @param {string|number} chatId
- * @param {number} [limit=12]
  */
 function getHistory(chatId, limit = 12) {
   const chat = getChat(chatId);
@@ -160,6 +186,9 @@ module.exports = {
   removeLastEntry,
   setHelpMessageId,
   setLeaderboardMessageId,
+  setLastWinnerMonth,
+  getAllChatIds,
   getMonthlyTotals,
+  getTotalsForMonth,
   getHistory,
 };

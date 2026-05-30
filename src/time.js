@@ -18,6 +18,16 @@ function monthKey(date = new Date()) {
 }
 
 /**
+ * Liefert den Monatsschlüssel des Vormonats, z. B. am 2026-05-xx -> "2026-04".
+ * @param {Date} [date=new Date()]
+ * @returns {string}
+ */
+function previousMonthKey(date = new Date()) {
+  const d = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  return monthKey(d);
+}
+
+/**
  * Wandelt "YYYY-MM" in z. B. "Mai 2026" um.
  * @param {string} key
  * @returns {string}
@@ -59,4 +69,4 @@ function formatTimestamp(iso) {
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}. ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-module.exports = { monthKey, germanMonthName, formatDuration, formatTimestamp };
+module.exports = { monthKey, previousMonthKey, germanMonthName, formatDuration, formatTimestamp };
