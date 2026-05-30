@@ -18,7 +18,8 @@ const HISTORY_CAP = 200; // wie viele History-Einträge je Chat maximal aufgehob
  *       helpMessageId: number | null,
  *       leaderboardMessageId: number | null,
  *       lastWinnerMonth: string | null,   // zuletzt gekürter Monat ("YYYY-MM")
- *       entries:  [ { id, userId, userName, minutes, ts, month } ],
+ *       factors:  { "<userId>": number }, // persönlicher Faktor je Nutzer (Standard 1)
+ *       entries:  [ { id, userId, userName, minutes, rawMinutes, factor, ts, month } ],
  *       history:  [ { ts, type: 'add'|'undo', userName, minutes } ]
  *     }
  *   }
@@ -56,6 +57,7 @@ function getChat(chatId) {
       // Seed = Vormonat, damit ein frisch angelegter Chat nicht rückwirkend
       // einen Monat kürt, den es vor dem Bot noch gar nicht gab.
       lastWinnerMonth: previousMonthKey(),
+      factors: {},
       entries: [],
       history: [],
     };
@@ -64,6 +66,7 @@ function getChat(chatId) {
   // Migration für ältere Datenstände
   if (!chat.entries) chat.entries = [];
   if (!chat.history) chat.history = [];
+  if (!chat.factors) chat.factors = {};
   if (chat.helpMessageId === undefined) chat.helpMessageId = null;
   if (chat.leaderboardMessageId === undefined) chat.leaderboardMessageId = null;
   if (chat.lastWinnerMonth === undefined) chat.lastWinnerMonth = previousMonthKey();
@@ -79,15 +82,21 @@ function pushHistory(chat, type, userName, minutes) {
 
 /**
  * Fügt einen Eintrag hinzu und protokolliert ihn in der History.
+ * @param {string|number} chatId
+ * @param {{id:number,name:string}} user
+ * @param {number} minutes  bereits gutgeschriebene (faktorisierte) Minuten
+ * @param {{rawMinutes?:number, factor?:number}} [opts]  Rohwert + Faktor zur Anzeige
  * @returns {object} der erstellte Eintrag
  */
-function addEntry(chatId, user, minutes) {
+function addEntry(chatId, user, minutes, opts = {}) {
   const chat = getChat(chatId);
   const entry = {
     id: Date.now() + Math.floor(Math.random() * 1000),
     userId: user.id,
     userName: user.name,
     minutes,
+    rawMinutes: opts.rawMinutes != null ? opts.rawMinutes : minutes,
+    factor: opts.factor != null ? opts.factor : 1,
     ts: new Date().toISOString(),
     month: monthKey(),
   };
@@ -129,6 +138,23 @@ function setLeaderboardMessageId(chatId, messageId) {
 
 function setLastWinnerMonth(chatId, month) {
   getChat(chatId).lastWinnerMonth = month;
+  save();
+}
+
+/** Persönlicher Faktor eines Nutzers (Standard 1, also 100 %). */
+function getFactor(chatId, userId) {
+  const f = getChat(chatId).factors[String(userId)];
+  return typeof f === 'number' && f > 0 ? f : 1;
+}
+
+/** Setzt den persönlichen Faktor eines Nutzers. */
+function setFactor(chatId, userId, factor) {
+  const chat = getChat(chatId);
+  if (factor === 1) {
+    delete chat.factors[String(userId)]; // 1 = Standard, nicht speichern
+  } else {
+    chat.factors[String(userId)] = factor;
+  }
   save();
 }
 
@@ -187,6 +213,8 @@ module.exports = {
   setHelpMessageId,
   setLeaderboardMessageId,
   setLastWinnerMonth,
+  getFactor,
+  setFactor,
   getAllChatIds,
   getMonthlyTotals,
   getTotalsForMonth,

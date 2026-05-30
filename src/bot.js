@@ -4,9 +4,9 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 
 const store = require('./store');
-const { parseDuration } = require('./parser');
+const { parseDuration, parseFactor } = require('./parser');
 const { renderLeaderboard } = require('./leaderboard');
-const { COMMANDS, helpText, renderHistory, renderWinner, escapeHtml } = require('./messages');
+const { COMMANDS, helpText, renderHistory, renderWinner, formatFactor, escapeHtml } = require('./messages');
 const { formatDuration, monthKey, previousMonthKey } = require('./time');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -22,6 +22,10 @@ const HISTORY_DELETE_MS = 60000;  // /history etwas länger, zum Lesen
 // Monats-Sieger: ab welcher Uhrzeit am 1. gekürt wird (lokale Zeit) und Prüf-Intervall.
 const ANNOUNCE_HOUR = 9;                 // 09:00 am Monatsersten
 const WINNER_CHECK_INTERVAL_MS = 60 * 60 * 1000; // stündlich prüfen
+
+// Erlaubter Wertebereich für den persönlichen Faktor.
+const MIN_FACTOR = 0.1;
+const MAX_FACTOR = 5;
 
 store.load();
 
@@ -137,22 +141,67 @@ async function handleStart(chatId) {
 }
 
 async function handleArbeit(chatId, user, argStr) {
-  const minutes = parseDuration(argStr);
-  if (minutes === null) {
+  const raw = parseDuration(argStr);
+  if (raw === null) {
     await tempReply(
       chatId,
       'ℹ️ So trägst du Zeit ein: <code>/arbeit 30</code>, <code>/arbeit 2h</code>, <code>/arbeit 1h30</code> oder <code>/arbeit 1,5h</code>.'
     );
     return;
   }
-  store.addEntry(chatId, user, minutes);
+  const factor = store.getFactor(chatId, user.id);
+  const credited = Math.round(raw * factor * 100) / 100;
+  store.addEntry(chatId, user, credited, { rawMinutes: raw, factor });
+
   const total = userMonthTotal(chatId, user.id);
+  const breakdown =
+    factor !== 1
+      ? `<b>${formatDuration(raw)}</b> × ${String(factor).replace('.', ',')} = <b>${formatDuration(credited)}</b>`
+      : `<b>${formatDuration(credited)}</b>`;
   await tempReply(
     chatId,
-    `✅ <b>${escapeHtml(user.name)}</b>: <b>${formatDuration(minutes)}</b> eingetragen — ` +
+    `✅ <b>${escapeHtml(user.name)}</b>: ${breakdown} eingetragen — ` +
       `diesen Monat: <b>${formatDuration(total)}</b> 💪`
   );
   await updateBoard(chatId);
+}
+
+/** /faktor – persönlichen Faktor anzeigen oder setzen (nur für sich selbst). */
+async function handleFaktor(chatId, user, argStr) {
+  if (!argStr) {
+    const f = store.getFactor(chatId, user.id);
+    await tempReply(
+      chatId,
+      `⚖️ <b>${escapeHtml(user.name)}</b>, dein Faktor ist <b>${formatFactor(f)}</b>.\n` +
+        'Ändern mit z. B. <code>/faktor 1.2</code> · zurücksetzen mit <code>/faktor 1</code>.'
+    );
+    return;
+  }
+
+  const f = parseFactor(argStr);
+  if (f === null) {
+    await tempReply(
+      chatId,
+      'ℹ️ Faktor so angeben: <code>/faktor 1.2</code> oder <code>/faktor 120%</code>.'
+    );
+    return;
+  }
+  if (f < MIN_FACTOR || f > MAX_FACTOR) {
+    await tempReply(
+      chatId,
+      `ℹ️ Bitte einen Faktor zwischen ${String(MIN_FACTOR).replace('.', ',')} und ${MAX_FACTOR} angeben ` +
+        '(z. B. <code>1.2</code> für 120 %).'
+    );
+    return;
+  }
+
+  store.setFactor(chatId, user.id, f);
+  const note = f === 1 ? ' (Standard, keine Anpassung)' : '';
+  await tempReply(
+    chatId,
+    `⚖️ <b>${escapeHtml(user.name)}</b>, dein Faktor ist jetzt <b>${formatFactor(f)}</b>${note}.\n` +
+      '<i>Gilt für neue Einträge — Vergangenes bleibt unverändert.</i>'
+  );
 }
 
 async function handleUndo(chatId, user) {
@@ -271,6 +320,10 @@ bot.on('message', async (msg) => {
       case 'arbeit':
       case 'log':
         await handleArbeit(chatId, user, argStr);
+        break;
+      case 'faktor':
+      case 'factor':
+        await handleFaktor(chatId, user, argStr);
         break;
       case 'undo':
         await handleUndo(chatId, user);

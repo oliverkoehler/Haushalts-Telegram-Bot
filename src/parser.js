@@ -53,4 +53,36 @@ function parseDuration(arg) {
   return null;
 }
 
-module.exports = { parseDuration };
+/**
+ * Liest aus dem Argument von /faktor einen Faktor.
+ * Unterstützte Formen:
+ *   "1.2" / "1,2"   -> 1.2
+ *   "120%"          -> 1.2
+ *   "150 %"         -> 1.5
+ *   "2"             -> 2
+ * Gibt null zurück, wenn nichts Gültiges erkannt wurde.
+ * Die Wertebereichs-Prüfung passiert im Aufrufer (für passende Meldungen).
+ *
+ * @param {string} arg
+ * @returns {number|null}
+ */
+function parseFactor(arg) {
+  if (!arg || typeof arg !== 'string') return null;
+  let s = arg.trim().toLowerCase().replace(',', '.');
+  if (!s) return null;
+
+  let percent = false;
+  if (s.endsWith('%')) {
+    percent = true;
+    s = s.slice(0, -1).trim();
+  }
+  if (!/^\d+(?:\.\d+)?$/.test(s)) return null;
+
+  let v = parseFloat(s);
+  if (Number.isNaN(v)) return null;
+  if (percent) v = v / 100;
+
+  return round2(v);
+}
+
+module.exports = { parseDuration, parseFactor };
