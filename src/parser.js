@@ -85,4 +85,38 @@ function parseFactor(arg) {
   return round2(v);
 }
 
-module.exports = { parseDuration, parseFactor };
+/**
+ * Wie parseDuration, aber nur erfolgreich, wenn die GESAMTE Eingabe eine
+ * Zeitangabe ist (kein Fremdtext). Gedacht für Freitext-Nachrichten, damit
+ * normale Unterhaltung wie "lass uns in 5 minuten essen" NICHT als Eintrag
+ * gewertet wird.
+ *
+ * Erkennt: "60", "1h3m", "1h30", "1:30", "2h", "1,5h", "1 stunde 30 minuten".
+ * Verwirft: alles mit zusätzlichem Text drumherum.
+ *
+ * @param {string} text
+ * @returns {number|null}
+ */
+function parseDurationStrict(text) {
+  if (!text || typeof text !== 'string') return null;
+  const s = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return null;
+
+  // Kompaktform "1:30" / "1h30" oder nackte Zahl -> bereits exakt (^...$)
+  if (/^\d+[:h]\d{1,2}$/.test(s) || /^\d+(?:[.,]\d+)?$/.test(s)) {
+    return parseDuration(s);
+  }
+
+  // Nur "Zahl+Einheit"-Tokens (evtl. mehrere) erlaubt. Alle Tokens und
+  // simple Verbindungswörter entfernen; wenn nichts übrig bleibt, ist es
+  // eine reine Zeitangabe.
+  const rest = s
+    .replace(/(\d+(?:[.,]\d+)?)\s*(stunden|stunde|std|hours|hour|hrs|hr|minuten|minute|min|m|h)/g, ' ')
+    .replace(/\bund\b/g, ' ')
+    .replace(/\s+/g, '');
+
+  if (rest === '') return parseDuration(s);
+  return null;
+}
+
+module.exports = { parseDuration, parseDurationStrict, parseFactor };

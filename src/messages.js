@@ -35,6 +35,7 @@ function helpText() {
     '🧹 <b>/arbeit &lt;zeit&gt;</b> — Zeit eintragen',
     '   z. B. <code>/arbeit 30</code> · <code>/arbeit 2h</code> · <code>/arbeit 1h30</code> · <code>/arbeit 1,5h</code>',
     '   (Zahl ohne Einheit = Minuten)',
+    '   …oder die Zeit einfach direkt tippen: <code>60</code> · <code>1h3m</code>',
     '⚖️ <b>/faktor &lt;wert&gt;</b> — dein persönlicher Faktor (nur für dich)',
     '   z. B. <code>/faktor 1.2</code> = 120 % → 60 Min werden zu 72 Min',
     '↩️ <b>/undo</b> — deinen letzten Eintrag löschen',

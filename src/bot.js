@@ -4,7 +4,7 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 
 const store = require('./store');
-const { parseDuration, parseFactor } = require('./parser');
+const { parseDuration, parseDurationStrict, parseFactor } = require('./parser');
 const { renderLeaderboard } = require('./leaderboard');
 const { COMMANDS, helpText, renderHistory, renderWinner, formatFactor, escapeHtml } = require('./messages');
 const { formatDuration, monthKey, previousMonthKey } = require('./time');
@@ -140,15 +140,8 @@ async function handleStart(chatId) {
   await tempReply(chatId, '✅ Eingerichtet! Hilfe und Rangliste sind oben angepinnt. 👆');
 }
 
-async function handleArbeit(chatId, user, argStr) {
-  const raw = parseDuration(argStr);
-  if (raw === null) {
-    await tempReply(
-      chatId,
-      'ℹ️ So trägst du Zeit ein: <code>/arbeit 30</code>, <code>/arbeit 2h</code>, <code>/arbeit 1h30</code> oder <code>/arbeit 1,5h</code>.'
-    );
-    return;
-  }
+/** Trägt Rohminuten (mit persönlichem Faktor) ein und bestätigt kurz. */
+async function creditTime(chatId, user, raw) {
   const factor = store.getFactor(chatId, user.id);
   const credited = Math.round(raw * factor * 100) / 100;
   store.addEntry(chatId, user, credited, { rawMinutes: raw, factor });
@@ -164,6 +157,18 @@ async function handleArbeit(chatId, user, argStr) {
       `diesen Monat: <b>${formatDuration(total)}</b> 💪`
   );
   await updateBoard(chatId);
+}
+
+async function handleArbeit(chatId, user, argStr) {
+  const raw = parseDuration(argStr);
+  if (raw === null) {
+    await tempReply(
+      chatId,
+      'ℹ️ So trägst du Zeit ein: <code>/arbeit 30</code>, <code>/arbeit 2h</code>, <code>/arbeit 1h30</code> oder <code>/arbeit 1,5h</code>.'
+    );
+    return;
+  }
+  await creditTime(chatId, user, raw);
 }
 
 /** /faktor – persönlichen Faktor anzeigen oder setzen (nur für sich selbst). */
@@ -289,8 +294,17 @@ bot.on('message', async (msg) => {
     const text = (msg.text || '').trim();
     if (!text) return;
 
-    // Nur auf Befehle reagieren (richtige Commands).
-    if (!text.startsWith('/')) return;
+    // Freitext (kein Befehl): nur eindeutige, alleinstehende Zeitangaben werten,
+    // z. B. "60", "1h3m", "1 Stunde 30 Minuten". Normale Unterhaltung bleibt
+    // unangetastet (wird weder eingetragen noch gelöscht).
+    if (!text.startsWith('/')) {
+      const raw = parseDurationStrict(text);
+      if (raw === null) return;
+      const u = { id: msg.from.id, name: displayName(msg.from) };
+      await deleteMessageSafe(chatId, msg.message_id);
+      await creditTime(chatId, u, raw);
+      return;
+    }
 
     // Befehl + evtl. @BotName + Argumente trennen.
     const firstToken = text.split(/\s+/)[0]; // z. B. "/arbeit@MeinBot"
